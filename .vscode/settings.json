@@ -1,0 +1,14 @@
+{
+  "files.exclude": {
+    "node_modules": true,
+    ".pulp-cache": true,
+    "output-client": true,
+    "bower_components": true,
+    "dist": true,
+    "src/**/*.js": true
+  },
+  "purescript.censorWarnings": [
+    "MissingTypeDeclaration"
+  ],
+  
+}

@@ -1,9 +1,11 @@
 node_modules
 bower_components
 dist
-output
+output-client
 .DS_Store
 typings
 npm-debug.log
 .psc-ide-port
 yarn-error.log
+src/*.js
+output
