@@ -93,7 +93,7 @@ apiReportHandler (AppState state) = do
   timezone <- readFloat <$> reqRouteParam "timezone"
   dateFrom <- reqRouteParam "dateFrom"
   dateTo <- reqRouteParam "dateTo"
-  text <- liftEff $ FS.readTextFile UTF8 $ "./server/Reports/" <> report <> "/template.sql"
+  text <- liftEff $ FS.readTextFile UTF8 $ "./src/server/Reports/" <> report <> "/template.sql"
 
   -- additional options
   isSync <- isTrue <$> getQueryParam "sync"

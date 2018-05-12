@@ -3,7 +3,9 @@ module Query.Types where
 import Prelude
 import Data.Foreign
 import Data.Foreign.Class
+import Data.Array as A
 import Data.JSDate as JSD
+import Data.List as L
 import Data.StrMap as SM
 import Control.Monad.Eff.Unsafe (unsafePerformEff)
 import Control.Monad.Except (runExcept)
@@ -16,8 +18,13 @@ import Data.JSDate (JSDate, toTimeString)
 import Data.List (List(..), intercalate, (:))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Monoid (mempty)
+import Data.Ord (abs)
 import Data.StrMap (StrMap, fold, lookup)
 import Data.Traversable (foldl, traverse)
+import React.DOM (s)
+
+class ToQueryPathString a where
+  toQueryPathString :: a -> String
    
 data SortOrder = ASC | DESC
 derive instance genericSortOrder :: Generic SortOrder _
@@ -47,6 +54,10 @@ emptyBreakdownDetails = BreakdownDetails { sort: Nothing, valuesFilter: Nothing 
 
 type Breakdown = StrMap BreakdownDetails
 
+instance toQueryPathStringBreakdown :: ToQueryPathString (StrMap BreakdownDetails) where
+  toQueryPathString b = ""
+
+
 data FilterVal = FilterValStr String | FilterValLike String | FilterValUnquotedInt Int | FilterValUnquotedNumber Number
 derive instance genericFilterVal :: Generic FilterVal _
 instance showFilterVal :: Show FilterVal where
@@ -63,6 +74,21 @@ instance showFilterLang :: Show FilterLang where
 
 
 type Filters = StrMap FilterLang
+
+instance toQueryPathStringFilters :: ToQueryPathString (StrMap FilterLang) where
+  toQueryPathString = A.intercalate "," <<< A.reverse <<< A.fromFoldable <<< fold (\arr key val -> L.Cons (key <> ":" <> langToStr val) arr) mempty
+    where
+    langToStr (FilterEq l) = toStr l
+    langToStr (FilterIn l) = "(" <> A.intercalate "," (A.fromFoldable $ map toStr l) <> ")"
+    langToStr (FilterRange l r) = "R(" <> toStr l <> "," <> toStr r <> ")"
+
+    toStr (FilterValStr s) = s
+    toStr (FilterValLike s) = s <> "*"
+    toStr (FilterValUnquotedInt s) = toSignedNum s
+    toStr (FilterValUnquotedNumber s) = toSignedNum s
+
+toSignedNum i = (if i >= zero then "+" else "-") <> show (abs i)
+
 
 newtype QueryParams d = QueryParams {
   timezone :: Number,
@@ -183,7 +209,7 @@ filtersToSqls params@(QueryParams p) options@(QueryOptions q) = rest
 
     filterValToStr :: FilterVal -> String
     filterValToStr (FilterValStr s) = " = " <> inSq s
-    filterValToStr (FilterValLike s) = " LIKE " <> inSq s
+    filterValToStr (FilterValLike s) = " LIKE " <> inSq (s <> "%")
     filterValToStr (FilterValUnquotedInt i) = " = " <> show i
     filterValToStr (FilterValUnquotedNumber i) = " = " <> show i
 
