@@ -8,4 +8,6 @@ npm-debug.log
 .psc-ide-port
 yarn-error.log
 src/*.js
-output
+server/*.js
+output*
+.psci_modules
