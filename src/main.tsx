@@ -32,6 +32,7 @@ class CounterApp extends React.Component {
 
 // vanilla hot module reloading
 // @see https://webpack.js.org/guides/hot-module-replacement/
+/*
 if(module.hot) {
 	const app = App.main(window.__puxLastState || initialState)();
 	// don't lose state while HMR
@@ -42,6 +43,7 @@ if(module.hot) {
 } else {
 	App.main(initialState)();
 }
+*/
 
 
 ReactDOM.render(

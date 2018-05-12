@@ -123,7 +123,7 @@ apiReportHandler (AppState state) = do
           qs <- liftAff $ state.queryAsync nocache hash sqlTemplate
           if isSync 
             then case qs of
-              Running fiber _ -> liftAff (joinFiber fiber) >>= send
+              Running fiber _ -> liftAff (joinFiber fiber) >>= (\result -> send { status: "Done", result })
               Done result -> send { status: "Done", result }
               Error e -> send { status: "Error", errorText: show e }
               Cancelled -> send { status: "Cancelled" }

@@ -54,7 +54,7 @@ filterValP requireSignedNums =
     signNum = sign (\x -> toNumber(-1) * x)
     star = queryParser.reservedOp "*" $> ""
 
-    sign :: ∀ t44 t45. Category t44 ⇒ t44 t45 t45 -> ParserT String Identity (t44 t45 t45)
+    sign :: ∀ c a. Category c ⇒ c a a -> ParserT String Identity (c a a)
     sign f = 
       if requireSignedNums 
         then signed

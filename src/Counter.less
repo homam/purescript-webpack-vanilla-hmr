@@ -1,5 +1,5 @@
 input[type=text] {
-  width: 400px
+  width: 600px
 }
 
 body {
@@ -9,4 +9,18 @@ body {
 body, input, button {
   font-family: 'Roboto Mono', monospace;
   font-size: 100%;
+}
+
+.error-indicator {
+  display: inline-block;
+  outline: solid 1px black;
+  width: 2ex;
+  height: 2ex;
+
+  &.error {
+    background-color: red;
+  }
+  &.ok {
+    background-color: green;
+  }
 }

@@ -4,65 +4,92 @@ import Prelude
 import Text.Smolder.Markup
 import Pux.DOM.Events
 import DOM.Event.Types
+import App.Utils
+import App.Components.QueryInput as QueryInput
+import DOM.Event.KeyboardEvent as KeyboardEvent
+import Query.Parser.UrlQueryParser as P
 import Query.Parser.UrlQueryParser as P
 import Query.Types as P
-import Control.Monad.Aff (attempt, launchAff)
+import Control.Monad.Aff (Aff, attempt, launchAff)
 import Control.Monad.Aff.Console (CONSOLE, log, logShow)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
-import DOM.Event.KeyboardEvent as KeyboardEvent
+import Control.Monad.Eff.Exception (EXCEPTION)
+import Control.MonadZero (empty)
 import Data.Argonaut.Core (Json)
 import Data.Either (Either(..))
 import Data.Foreign (Foreign)
+import Data.Foreign.Generic (encodeJSON)
+import Data.Function (const, ($), (#))
 import Data.HTTP.Method (Method(..))
+import Data.List ((:))
 import Data.Maybe (Maybe(..))
+import Data.Traversable (intercalate)
 import Network.HTTP.Affjax (AJAX, affjax, defaultRequest, get)
-import Pux (EffModel, noEffects)
-import Pux.DOM.HTML (HTML)
+import Pux (EffModel, noEffects, mapEffects, mapState)
+import Pux.DOM.HTML (HTML, child)
 import Pux.Renderer.React (reactClass, reactClassWithProps)
+import Query.Types (class ToQueryPathString, Breakdown, Filters)
 import React (ReactClass)
-import Text.Smolder.HTML (button, h1, h3, div, input) as S
-import Text.Smolder.HTML.Attributes (name, type', value)
+import Signal.Channel (CHANNEL)
+import Text.Parsing.Parser (ParseError(..))
+import Text.Smolder.HTML as S
+import Text.Smolder.HTML.Attributes (className, name, type', value)
 import Unsafe.Coerce (unsafeCoerce)
 
-data Action = Increment | Decrement | Query | QueryTextChanged DOMEvent | QueryTextKeyUp KeyboardEvent
+data QueryInputType = FilterQueryInputType | BreakdownQueryInputType
+data QueryState = NothingYet | Running | CompletedSuccessfully Foreign | CompletedWithError String
+data Action = QueryInputAction QueryInputType QueryInput.Action | Query | Result Foreign  
 
-type State = { count :: Int, queryText :: String }
+type State = { 
+    filterQueryInput :: QueryInput.State Filters
+  , breakdownQueryInput :: QueryInput.State Breakdown
+  , dateFrom :: String
+  , dateTo :: String
+  , timezone :: String
+  , result :: QueryState
+}
 
 initialState :: State
-initialState = {count: 0, queryText: "country_code:(AE,ZA,TH,MY,MX,OM,QA)"}
+initialState = {
+    filterQueryInput: QueryInput.initialState { value: "country_code:(AE,ZA,TH,MY,MX,OM,QA)", parser: P.runFilterParser }
+  , breakdownQueryInput: QueryInput.initialState { value: "country_code,operator_code", parser: P.runBreakdownParser }
+  , dateFrom: "2018-05-09"
+  , dateTo: "2018-05-15"
+  , timezone: "2"
+  , result: NothingYet
+}
 
 type MyEffects = (ajax :: AJAX, console :: CONSOLE)
 
-update ::  Action -> State ->  EffModel State Action (ajax :: AJAX, console :: CONSOLE) -- forall e . Action -> State ->  EffModel State Action e
-update Increment state = noEffects $ state { count = state.count + 1 }
-update Decrement state = noEffects $ state { count= state.count - 3 }
-update (QueryTextChanged ev) state = noEffects $ state { queryText = targetValue ev }
-update (QueryTextKeyUp ev) state = {
-  state,
-  effects: [
-    if "Enter" == KeyboardEvent.key ev
-      then do
-        case P.runFilterParser state.queryText of
-          Left e -> liftEff $ consoleLog e
-          Right r -> liftEff $ consoleLog r *> consoleLog (P.toQueryPathString r)
-        pure Nothing
-      else pure Nothing
-  ]
-}
+update :: Action -> State ->  EffModel State Action MyEffects
+update (QueryInputAction ty ev) state = 
+  case ty of
+    FilterQueryInputType ->  handle state.filterQueryInput (\s -> state { filterQueryInput = s })
+    BreakdownQueryInputType -> handle state.breakdownQueryInput (\s -> state { breakdownQueryInput = s })
+  where
+  handle :: forall a. ToQueryPathString a => QueryInput.State a
+   → (QueryInput.State a → State ) 
+   → EffModel State Action MyEffects
+  handle  get' set' = 
+    QueryInput.update ev get'
+      # mapEffects (QueryInputAction ty) # mapState set'
+
+update (Result result) state = noEffects $ state { result = CompletedSuccessfully result }
 update Query state = {
-  state: state,
+  state: state { result = Running },
   effects: [
     do
-      let url =  "http://localhost:8080/api/" <> state.queryText <> "?sync=true"
+      let url = "http://localhost:8080/api/" <>  intercalate "/" ("Sessions" : state.timezone :  state.dateFrom : state.dateTo : state.filterQueryInput.value : state.breakdownQueryInput.value : empty) <> "?sync=true"
       res <- affjax $ defaultRequest { url = url, method = Left GET }
       liftEff $ consoleLog (res.response :: Foreign)
-      pure Nothing
+      pure $ Just (Result res.response)
   ]
 }
+  where
+    slash x = x <> "/"
 
 foreign import buttonClass :: ∀ props. ReactClass props
-foreign import consoleLog :: ∀ a e. a -> Eff e Unit
 
 -- myButton :: ∀ ev. HTML ev
 myButton = reactClassWithProps buttonClass "button"
@@ -70,10 +97,24 @@ myButton = reactClassWithProps buttonClass "button"
 view :: State -> HTML Action
 view state =
   S.div do
-    S.h1 $ text "PureScript ++ Vanilla HMR"
-    S.h3 $ text $ ("Count: " <> show state.count)
-    S.input ! type' "text" ! value state.queryText #! onChange QueryTextChanged #! onKeyUp (QueryTextKeyUp <<< unsafeCoerce)
+    S.h1 $ text "PureScript + Vanilla HMR"
+      -- myButton {} #! onClick (const Increment) $ text "Increment+"
     S.div do
-      myButton {} #! onClick (const Increment) $ text "Increment+"
-      S.button #! onClick (const Decrement) $ text "Decrement"
+      S.div ! className "row" $ do
+        S.input ! type' "date" ! value state.dateFrom
+        S.input ! type' "date" ! value state.dateTo
+      row "Filter" $ child (QueryInputAction FilterQueryInputType) QueryInput.view $ state.filterQueryInput
+      row "Breakdown" $ child (QueryInputAction BreakdownQueryInputType) QueryInput.view $ state.breakdownQueryInput
+    S.div do
       S.button #! onClick (const Query) $ text "Query"
+    S.div $ viewQueryState state.result
+
+row label comp = 
+  S.div ! className "row" $ do
+    S.div ! className "label" $ text label
+    comp
+
+viewQueryState NothingYet = S.pre $ text ""
+viewQueryState (CompletedSuccessfully r) = S.pre $ text (jsonStringify r)
+viewQueryState (CompletedWithError e) = S.pre $ text e
+viewQueryState Running = S.pre $ text "Wait..."

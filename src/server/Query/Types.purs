@@ -1,31 +1,44 @@
 module Query.Types where
 
-import Prelude
-import Data.Foreign
-import Data.Foreign.Class
+import Prelude (class Ord, class Ring, class Semiring, class Show, append, bind, id, map, negate, not, pure, show, zero, ($), (*), (<$>), (<<<), (<>), (==), (>), (>=), (>>=))
+import Data.Foreign (F, Foreign, readBoolean, readNullOrUndefined, readNumber, readString, unsafeFromForeign)
 import Data.Array as A
 import Data.JSDate as JSD
 import Data.List as L
 import Data.StrMap as SM
 import Control.Monad.Eff.Unsafe (unsafePerformEff)
-import Control.Monad.Except (runExcept)
 import Data.Foreign.Index ((!))
-import Data.Function.Uncurried (Fn2, Fn1)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Int (toNumber)
-import Data.JSDate (JSDate, toTimeString)
-import Data.List (List(..), intercalate, (:))
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.JSDate (JSDate)
+import Data.List (List, filter, intercalate, (:))
+import Data.Maybe (Maybe(Nothing, Just), fromMaybe)
 import Data.Monoid (mempty)
 import Data.Ord (abs)
-import Data.StrMap (StrMap, fold, lookup)
-import Data.Traversable (foldl, traverse)
-import React.DOM (s)
+import Data.StrMap (StrMap, fold)
+import Data.Traversable (traverse)
+import Data.String as S
 
 class ToQueryPathString a where
   toQueryPathString :: a -> String
    
+strMapToQueryPathString :: forall a. (a -> String) -> StrMap a -> String 
+strMapToQueryPathString f = 
+  A.intercalate "," 
+  <<< A.reverse
+  <<< A.fromFoldable 
+  <<< fold (\arr key val -> L.Cons (key `appif` f val  ) arr) mempty
+  where
+  appif a b = if S.length b > 0 then a <> ":" <> b else a
+
+prependToAll sep (x : xs) = sep : x : prependToAll sep xs
+prependToAll _   _     = mempty
+
+intersperse sep (x : xs)  = x : prependToAll sep xs
+intersperse _   _      = mempty
+
+
 data SortOrder = ASC | DESC
 derive instance genericSortOrder :: Generic SortOrder _
 instance showSortOrder :: Show SortOrder where
@@ -55,8 +68,26 @@ emptyBreakdownDetails = BreakdownDetails { sort: Nothing, valuesFilter: Nothing 
 type Breakdown = StrMap BreakdownDetails
 
 instance toQueryPathStringBreakdown :: ToQueryPathString (StrMap BreakdownDetails) where
-  toQueryPathString b = ""
+  toQueryPathString = strMapToQueryPathString breakdownToStr
+    where
+      breakdownToStr :: BreakdownDetails -> String
+      breakdownToStr (BreakdownDetails det) = 
+        let s = sortToStr <$> det.sort
+            f = valuesFilterToStr <$> det.valuesFilter
+        in intercalate "" $ surround "(" ")" $ intersperse "," $ map (fromMaybe "") $ filter (\x -> not (x == Nothing)) (s : f : mempty)
 
+      surround l r (a:as) = (l : a : as) `append` (r : mempty)
+      surround _ _ _ = mempty
+
+      
+      sortToStr :: Sort -> String
+      sortToStr (Sort s) = s.by <> ":" <> orderToStr s.order
+
+      orderToStr ASC = "A"
+      orderToStr DESC = "D"
+
+      valuesFilterToStr :: ValuesFilter -> String
+      valuesFilterToStr = strMapToQueryPathString show
 
 data FilterVal = FilterValStr String | FilterValLike String | FilterValUnquotedInt Int | FilterValUnquotedNumber Number
 derive instance genericFilterVal :: Generic FilterVal _
@@ -76,7 +107,7 @@ instance showFilterLang :: Show FilterLang where
 type Filters = StrMap FilterLang
 
 instance toQueryPathStringFilters :: ToQueryPathString (StrMap FilterLang) where
-  toQueryPathString = A.intercalate "," <<< A.reverse <<< A.fromFoldable <<< fold (\arr key val -> L.Cons (key <> ":" <> langToStr val) arr) mempty
+  toQueryPathString = strMapToQueryPathString langToStr
     where
     langToStr (FilterEq l) = toStr l
     langToStr (FilterIn l) = "(" <> A.intercalate "," (A.fromFoldable $ map toStr l) <> ")"
@@ -87,7 +118,8 @@ instance toQueryPathStringFilters :: ToQueryPathString (StrMap FilterLang) where
     toStr (FilterValUnquotedInt s) = toSignedNum s
     toStr (FilterValUnquotedNumber s) = toSignedNum s
 
-toSignedNum i = (if i >= zero then "+" else "-") <> show (abs i)
+    toSignedNum :: ∀ r. Ord r ⇒ Semiring r ⇒ Show r ⇒ Ring r ⇒ r → String
+    toSignedNum i = (if i >= zero then "+" else "-") <> show (abs i)
 
 
 newtype QueryParams d = QueryParams {
@@ -222,7 +254,11 @@ filtersToSqls params@(QueryParams p) options@(QueryOptions q) = rest
 inSq :: String -> String
 inSq s = "'" <> s <> "'"
 
+tryParse :: forall a. F Foreign -> (Foreign -> F a) -> F (Maybe a)
+tryParse v r = v >>= readNullOrUndefined >>= traverse r
+infixl 4 tryParse as ?>>=
 
+{-
 ---
  
 foreign import sayHello :: String
@@ -241,17 +277,12 @@ readCat value = do
   breed <- value ! "breed" ?>>= readString
   pure $ Cat { color: color, breed: breed }
 
-
-tryParse :: forall a. F Foreign -> (Foreign -> F a) -> F (Maybe a)
-tryParse v r = v >>= readNullOrUndefined >>= traverse r
-infixl 4 tryParse as ?>>=
-
 foreign import myCat :: Cat
 
 emptyCat = Cat { color: Nothing, breed: Nothing }
 foreign import mkCat :: forall a. Fn2 Cat (a -> Maybe a) Cat
 
-{-
+
 import Text.Parsing.Parser (runParser)
 import Query.Parser.UrlQueryParser
 b =  runParser "country_code:(sales:A),operator_code,day:(views:A,[sales:10,views:100])" breakdownP
