@@ -3,6 +3,7 @@ module App.App1 where
 import Prelude
 import App.Counter as Counter
 import Data.Array as A
+import App.RouteValue (RouteValue(..))
 import App.Routes (Route(..), match)
 import Control.Alternative ((<|>))
 import Control.Applicative (pure)
@@ -77,6 +78,7 @@ page state (Reports report timezone dateFrom dateTo filterStr breakdownStr) = do
       , dateTo = dateTo
       , filterQueryInput = state.counterState.filterQueryInput { value = filterStr }
       , breakdownQueryInput = state.counterState.breakdownQueryInput { value = breakdownStr }
-      , filterStr = state.counterState.filterStr <|> Left filterStr
+      , filterStr = FromRoute filterStr <|> state.counterState.filterStr 
+      , breakdownStr = FromRoute breakdownStr <|>  state.counterState.breakdownStr 
       }
 page _ NotFound = h1 $ text "Not Found!"

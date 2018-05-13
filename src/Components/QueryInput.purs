@@ -3,9 +3,9 @@ module App.Components.QueryInput where
 import DOM.Event.KeyboardEvent as KeyboardEvent
 import Text.Smolder.HTML as S
 import App.Utils (consoleLog)
-import Control.Monad.Aff.Console (CONSOLE)
+import Control.Monad.Aff.Console (CONSOLE, log)
 import Control.Monad.Eff.Class (liftEff)
-import DOM.Event.Types (KeyboardEvent)
+import DOM.Event.Types (KeyboardEvent, keyboardEventToEvent)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Prelude (class Eq, discard, pure, show, ($), (*>), (<<<), (<>), (==))
@@ -36,20 +36,22 @@ initialState {value, parser} = { value, parser, result: Nothing }
 type MyEffects e = (console :: CONSOLE | e)
 
 update :: forall e a. ToQueryPathString a => Action -> State a -> EffModel (State a) Action (MyEffects e)
-update (QueryTextChanged ev) state = noEffects $ state { value = targetValue ev }
+update (QueryTextChanged ev) state = { state: state { value = targetValue ev }, effects: [pure Nothing] }
 update (QueryTextKeyUp ev) state = 
   if "Enter" == KeyboardEvent.key ev
     then 
       case state.parser state.value of
         Left e -> { 
-            state: state { result = Just (Left e) }
+            state: state { value = value, result = Just (Left e) }
           , effects: [liftEff (consoleLog e) *> pure Nothing]
           }
         Right r -> {
-            state: state { result = Just (Right r)}
+            state: state { value = value, result = Just (Right r)}
           , effects: [liftEff $ consoleLog r *> consoleLog (P.toQueryPathString r) *> pure Nothing]
         }
-    else noEffects state
+    else  {state: state { value = value }, effects: [] }
+  where
+    value = targetValue $ keyboardEventToEvent ev
 
 
 view :: forall a. P.ToQueryPathString a => State a -> HTML Action

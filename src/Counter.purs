@@ -37,11 +37,9 @@ import Pux.DOM.History (sampleURL)
 import Pux.Renderer.React (reactClass, reactClassWithProps, renderToReact)
 import Query.Types (class ToQueryPathString, Breakdown, Filters)
 import React (ReactClass)
-import Signal ((~>))
-import Signal.Channel (CHANNEL)
-import Text.Parsing.Parser (ParseError(..))
 import Text.Smolder.HTML.Attributes (className, name, type', value)
-import Unsafe.Coerce (unsafeCoerce)
+import App.RouteValue
+import Data.Array as A
 
 data QueryInputType = FilterQueryInputType | BreakdownQueryInputType
 derive instance genericQueryInputType :: Generic QueryInputType
@@ -59,7 +57,8 @@ instance eqAction :: Eq Action where
 type State = { 
     filterQueryInput :: QueryInput.State Filters
   , breakdownQueryInput :: QueryInput.State Breakdown
-  , filterStr :: Either String String
+  , filterStr :: RouteValue String
+  , breakdownStr :: RouteValue String
   , dateFrom :: String
   , dateTo :: String
   , timezone :: String
@@ -68,9 +67,10 @@ type State = {
 
 initialState :: State
 initialState = {
-    filterQueryInput: QueryInput.initialState { value: "country_code:(AE,ZA,TH,MY,MX,OM,QA)", parser: P.runFilterParser }
-  , breakdownQueryInput: QueryInput.initialState { value: "country_code,operator_code", parser: P.runBreakdownParser }
-  , filterStr: Left ""
+    filterQueryInput: QueryInput.initialState { parser: P.runFilterParser, value: "" }
+  , breakdownQueryInput: QueryInput.initialState { parser: P.runBreakdownParser, value: "" }
+  , filterStr: NotInitialized
+  , breakdownStr: NotInitialized
   , dateFrom: "2018-05-09"
   , dateTo: "2018-05-15"
   , timezone: "2"
@@ -81,13 +81,16 @@ type MyEffects = (ajax :: AJAX, console :: CONSOLE, history :: HISTORY, dom :: D
 
 update :: Action -> State ->  EffModel State Action MyEffects
 update (QueryInputAction ty ev) state = 
-  case ty of
-    FilterQueryInputType ->  handle state.filterQueryInput (\s -> state { filterQueryInput = s, filterStr = Right s.value })
-    BreakdownQueryInputType -> handle state.breakdownQueryInput (\s -> state { breakdownQueryInput = s })
+  let tup = 
+          case ty of
+            FilterQueryInputType ->  handle state.filterQueryInput (\s -> state { filterQueryInput = s, filterStr = FromComponent s.value })
+            BreakdownQueryInputType -> handle state.breakdownQueryInput (\s -> state { breakdownQueryInput = s, breakdownStr = FromComponent s.value })
+  in {state: tup.state, effects: tup.effects} -- A.cons (liftEff (consoleLog state *> consoleLog ev *> consoleLog tup.state) *> pure Nothing) tup.effects}
+
   where
   handle :: forall a. ToQueryPathString a => QueryInput.State a
-   → (QueryInput.State a → State ) 
-   → EffModel State Action MyEffects
+  → (QueryInput.State a → State ) 
+  → EffModel State Action MyEffects
   handle  get' set' = 
     QueryInput.update ev get'
       # mapEffects (QueryInputAction ty) # mapState set'
@@ -120,8 +123,12 @@ view state =
       S.div ! className "row" $ do
         S.input ! type' "date" ! value state.dateFrom
         S.input ! type' "date" ! value state.dateTo
-      row "Filter" $ child (QueryInputAction FilterQueryInputType) QueryInput.view $ state.filterQueryInput { value = either id id state.filterStr}
-      row "Breakdown" $ child (QueryInputAction BreakdownQueryInputType) QueryInput.view $ state.breakdownQueryInput
+      row "Filter" $ 
+        child (QueryInputAction FilterQueryInputType) QueryInput.view $ 
+          state.filterQueryInput { value = fromRouteValue "" state.filterStr }
+      row "Breakdown" $ 
+        child (QueryInputAction BreakdownQueryInputType) QueryInput.view $ 
+          state.breakdownQueryInput { value = fromRouteValue "" state.breakdownStr }
     S.div do
       S.button #! onClick (const Query) $ text "Query"
     S.div $ viewQueryState state.result
