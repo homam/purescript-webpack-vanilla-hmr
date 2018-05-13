@@ -1,5 +1,5 @@
-import * as App from "./App.purs";
-import {initialState} from './App1.purs';
+import * as App from "./Main.purs";
+import {initialState} from './App.purs';
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 
@@ -31,6 +31,10 @@ class CounterApp extends React.Component {
 	}
 }
 
+if (module.hot) {
+
+	module.hot.accept();
+}
 // vanilla hot module reloading
 // @see https://webpack.js.org/guides/hot-module-replacement/
 /*

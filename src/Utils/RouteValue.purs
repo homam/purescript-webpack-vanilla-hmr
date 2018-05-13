@@ -1,4 +1,4 @@
-module App.RouteValue where
+module App.Utils.RouteValue where
 
 import Prelude
 import Control.Alt (class Alt)

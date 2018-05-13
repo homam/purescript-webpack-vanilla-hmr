@@ -3,13 +3,13 @@ module App.Components.QueryInput where
 import DOM.Event.KeyboardEvent as KeyboardEvent
 import Text.Smolder.HTML as S
 import App.Utils (consoleLog)
-import Control.Monad.Aff.Console (CONSOLE, log)
+import Control.Monad.Aff.Console (CONSOLE)
 import Control.Monad.Eff.Class (liftEff)
 import DOM.Event.Types (KeyboardEvent, keyboardEventToEvent)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Prelude (class Eq, discard, pure, show, ($), (*>), (<<<), (<>), (==))
-import Pux (EffModel, noEffects)
+import Pux (EffModel)
 import Pux.DOM.Events (DOMEvent, onChange, onKeyUp, targetValue)
 import Pux.DOM.HTML (HTML)
 import Query.Types (class ToQueryPathString, toQueryPathString) as P
