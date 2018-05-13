@@ -39,7 +39,6 @@ initialState = {
 
 update :: Action -> State ->  EffModel State Action AppEffects
 update (QueryInputAction ty ev) state = 
-  let tup = 
         case ty of
           FilterQueryInputType -> 
             QueryInput.update ev state.filterQueryInput
@@ -47,11 +46,10 @@ update (QueryInputAction ty ev) state =
           BreakdownQueryInputType -> 
             QueryInput.update ev state.breakdownQueryInput
               # mapEffects (QueryInputAction ty) # mapState (\s -> state { breakdownStr = FromComponent s.value, breakdownQueryInput = s })
-  in {state: tup.state, effects: tup.effects} -- A.cons (liftEff (consoleLog state *> consoleLog ev *> consoleLog tup.state) *> pure Nothing) tup.effects}
 
 update (Result result) state = noEffects $ state { result = CompletedSuccessfully result }
 update Query state' = traceAny {component: "Layout/update", state'} $ const {
-  state: state { result = Running, filterStr = FromComponent state.filterQueryInput.value },
+  state: state { result = Running },
   effects: [
     do liftEff (consoleLog "-----\nLayout" *> consoleLog state' *> consoleLog state) *> pure Nothing
     ,
@@ -65,7 +63,7 @@ update Query state' = traceAny {component: "Layout/update", state'} $ const {
   ]
   }
   where
-    state = state' { result = Running, filterStr = FromComponent state'.filterQueryInput.value }
+    state = state' { result = Running }
 
 view :: State -> HTML Action
 view state =

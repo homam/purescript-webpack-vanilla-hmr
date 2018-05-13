@@ -74,7 +74,7 @@ toLayoutState (Reports report timezone dateFrom dateTo filterStr breakdownStr) l
       timezone = timezone 
     , dateFrom = dateFrom
     , dateTo = dateTo
-    , filterQueryInput = layoutState.filterQueryInput { value = fromRouteValue "" $ FromRoute filterStr <|> layoutState.filterStr  }
+    -- , filterQueryInput = layoutState.filterQueryInput { value = fromRouteValue "" $ FromRoute filterStr <|> layoutState.filterStr  }
     -- , breakdownQueryInput = layoutState.breakdownQueryInput { value = breakdownStr }
     , filterStr = FromRoute filterStr <|> layoutState.filterStr 
     , breakdownStr = FromRoute breakdownStr <|>  layoutState.breakdownStr 
