@@ -1,7 +1,12 @@
-import * as App from './App.purs';
-import {initialState} from './Counter.purs';
+import * as App from "./App.purs";
+import {initialState} from './App1.purs';
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
+import createBrowserHistory from "history/createBrowserHistory";
+import { Route, Switch, Router } from "react-router";
+
+const history = createBrowserHistory();
+
 
 declare const module : any
 declare global {
@@ -24,7 +29,7 @@ class CounterApp extends React.Component {
 
 		return (
 			<div className="App">
-				<Counter />
+				<Counter history={ history } />
 			</div>
 		);
 	}
@@ -45,10 +50,12 @@ if(module.hot) {
 }
 */
 
+const MainRoutedComponent = () => <Router history={history}>
+		<Route path='/' component={CounterApp} />
+	</Router>
 
-ReactDOM.render(
-	<CounterApp  />,
-	document.getElementById("counterApp")
-);
+
+
+ReactDOM.render(<MainRoutedComponent />, document.getElementById("counterApp"));
 
 

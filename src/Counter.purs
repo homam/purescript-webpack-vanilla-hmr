@@ -10,40 +10,56 @@ import DOM.Event.KeyboardEvent as KeyboardEvent
 import Query.Parser.UrlQueryParser as P
 import Query.Parser.UrlQueryParser as P
 import Query.Types as P
+import Text.Smolder.HTML as S
 import Control.Monad.Aff (Aff, attempt, launchAff)
 import Control.Monad.Aff.Console (CONSOLE, log, logShow)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
 import Control.Monad.Eff.Exception (EXCEPTION)
 import Control.MonadZero (empty)
+import DOM (DOM)
+import DOM.HTML (window)
+import DOM.HTML.Types (HISTORY)
 import Data.Argonaut.Core (Json)
-import Data.Either (Either(..))
+import Data.Either (Either(..), either)
 import Data.Foreign (Foreign)
 import Data.Foreign.Generic (encodeJSON)
 import Data.Function (const, ($), (#))
+import Data.Generic (class Generic)
 import Data.HTTP.Method (Method(..))
 import Data.List ((:))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (intercalate)
 import Network.HTTP.Affjax (AJAX, affjax, defaultRequest, get)
-import Pux (EffModel, noEffects, mapEffects, mapState)
+import Pux (App, CoreEffects, EffModel, mapEffects, mapState, noEffects, start)
 import Pux.DOM.HTML (HTML, child)
-import Pux.Renderer.React (reactClass, reactClassWithProps)
+import Pux.DOM.History (sampleURL)
+import Pux.Renderer.React (reactClass, reactClassWithProps, renderToReact)
 import Query.Types (class ToQueryPathString, Breakdown, Filters)
 import React (ReactClass)
+import Signal ((~>))
 import Signal.Channel (CHANNEL)
 import Text.Parsing.Parser (ParseError(..))
-import Text.Smolder.HTML as S
 import Text.Smolder.HTML.Attributes (className, name, type', value)
 import Unsafe.Coerce (unsafeCoerce)
 
 data QueryInputType = FilterQueryInputType | BreakdownQueryInputType
+derive instance genericQueryInputType :: Generic QueryInputType
+derive instance eqQueryInputType :: Eq QueryInputType 
+
 data QueryState = NothingYet | Running | CompletedSuccessfully Foreign | CompletedWithError String
 data Action = QueryInputAction QueryInputType QueryInput.Action | Query | Result Foreign  
+
+instance eqAction :: Eq Action where
+  eq (QueryInputAction t1 a1) (QueryInputAction t2 a2) = t1 == t2 && a1 == a2
+  eq Query Query = true
+  eq (Result _) (Result _) = true
+  eq _ _ = false
 
 type State = { 
     filterQueryInput :: QueryInput.State Filters
   , breakdownQueryInput :: QueryInput.State Breakdown
+  , filterStr :: Either String String
   , dateFrom :: String
   , dateTo :: String
   , timezone :: String
@@ -54,18 +70,19 @@ initialState :: State
 initialState = {
     filterQueryInput: QueryInput.initialState { value: "country_code:(AE,ZA,TH,MY,MX,OM,QA)", parser: P.runFilterParser }
   , breakdownQueryInput: QueryInput.initialState { value: "country_code,operator_code", parser: P.runBreakdownParser }
+  , filterStr: Left ""
   , dateFrom: "2018-05-09"
   , dateTo: "2018-05-15"
   , timezone: "2"
   , result: NothingYet
 }
 
-type MyEffects = (ajax :: AJAX, console :: CONSOLE)
+type MyEffects = (ajax :: AJAX, console :: CONSOLE, history :: HISTORY, dom :: DOM)
 
 update :: Action -> State ->  EffModel State Action MyEffects
 update (QueryInputAction ty ev) state = 
   case ty of
-    FilterQueryInputType ->  handle state.filterQueryInput (\s -> state { filterQueryInput = s })
+    FilterQueryInputType ->  handle state.filterQueryInput (\s -> state { filterQueryInput = s, filterStr = Right s.value })
     BreakdownQueryInputType -> handle state.breakdownQueryInput (\s -> state { breakdownQueryInput = s })
   where
   handle :: forall a. ToQueryPathString a => QueryInput.State a
@@ -103,7 +120,7 @@ view state =
       S.div ! className "row" $ do
         S.input ! type' "date" ! value state.dateFrom
         S.input ! type' "date" ! value state.dateTo
-      row "Filter" $ child (QueryInputAction FilterQueryInputType) QueryInput.view $ state.filterQueryInput
+      row "Filter" $ child (QueryInputAction FilterQueryInputType) QueryInput.view $ state.filterQueryInput { value = either id id state.filterStr}
       row "Breakdown" $ child (QueryInputAction BreakdownQueryInputType) QueryInput.view $ state.breakdownQueryInput
     S.div do
       S.button #! onClick (const Query) $ text "Query"
@@ -118,3 +135,18 @@ viewQueryState NothingYet = S.pre $ text ""
 viewQueryState (CompletedSuccessfully r) = S.pre $ text (jsonStringify r)
 viewQueryState (CompletedWithError e) = S.pre $ text e
 viewQueryState Running = S.pre $ text "Wait..."
+
+
+-- type WebApp = App (DOMEvent -> Action) Action State
+-- toReact :: forall props . State -> Eff ( CoreEffects MyEffects) {component :: (ReactClass props), app:: WebApp}
+-- toReact state = do
+--   urlSignal <- sampleURL =<< window
+--   let routeSignal = urlSignal ~> match
+--   app <- start
+--     { initialState: state
+--     , foldp: update
+--     , view
+--     , inputs: [routeSignal]
+--     }
+--   renderer <- renderToReact app.markup app.input 
+--   pure $ { component: renderer, app: app }

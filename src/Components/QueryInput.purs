@@ -1,25 +1,30 @@
 module App.Components.QueryInput where
 
-import Prelude (discard, pure, show, ($), (*>), (<<<), (<>), (==))
-import Text.Smolder.Markup (text, (!), (#!))
-import Pux.DOM.Events (DOMEvent, onChange, onKeyUp, targetValue)
-import DOM.Event.Types (KeyboardEvent)
-import App.Utils (consoleLog)
 import DOM.Event.KeyboardEvent as KeyboardEvent
-import Query.Types (class ToQueryPathString, toQueryPathString) as P
 import Text.Smolder.HTML as S
+import App.Utils (consoleLog)
 import Control.Monad.Aff.Console (CONSOLE)
 import Control.Monad.Eff.Class (liftEff)
+import DOM.Event.Types (KeyboardEvent)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
+import Prelude (class Eq, discard, pure, show, ($), (*>), (<<<), (<>), (==))
 import Pux (EffModel, noEffects)
+import Pux.DOM.Events (DOMEvent, onChange, onKeyUp, targetValue)
 import Pux.DOM.HTML (HTML)
+import Query.Types (class ToQueryPathString, toQueryPathString) as P
 import Query.Types (class ToQueryPathString)
 import Text.Parsing.Parser (ParseError)
 import Text.Smolder.HTML.Attributes (className, title, type', value)
+import Text.Smolder.Markup (text, (!), (#!))
 import Unsafe.Coerce (unsafeCoerce)
 
-data Action = QueryTextChanged DOMEvent | QueryTextKeyUp KeyboardEvent -- | QueryParserError ParseError
+data Action = QueryTextChanged DOMEvent | QueryTextKeyUp KeyboardEvent 
+
+instance eqAction :: Eq Action where
+  eq (QueryTextChanged _) (QueryTextChanged _ ) = true
+  eq (QueryTextKeyUp _) (QueryTextKeyUp _ ) = true
+  eq _ _ = false
 
 type Parser a = String -> Either ParseError a
 
