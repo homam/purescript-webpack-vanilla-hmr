@@ -30,8 +30,8 @@ type Parser a = String -> Either ParseError a
 
 type State a = { value :: String, parser :: Parser a, result :: Maybe (Either ParseError a) }
 
-initialState :: forall a. {value :: String, parser :: Parser a } -> State a
-initialState {value, parser} = { value, parser, result: Nothing }
+initialState :: forall a. Parser a -> State a
+initialState parser = { value: "", parser, result: Nothing }
 
 type MyEffects e = (console :: CONSOLE | e)
 

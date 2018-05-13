@@ -1,12 +1,11 @@
 module App.Layout where
 
-import Prelude (bind, const, discard, pure, (#), ($), (<>))
-import Text.Smolder.Markup (text, (!), (#!))
-import Pux.DOM.Events (onClick)
-import App.Utils (consoleLog, jsonStringify)
 import App.Components.QueryInput as QueryInput
-import Query.Parser.UrlQueryParser (runBreakdownParser, runFilterParser) as P
 import Text.Smolder.HTML as S
+import App.Effects (AppEffects)
+import App.LayoutTypes (Action(..), QueryInputType(..), QueryState(..), State)
+import App.Utils (consoleLog, jsonStringify)
+import App.Utils.RouteValue (RouteValue(..), fromRouteValue)
 import Control.Monad.Eff.Class (liftEff)
 import Control.MonadZero (empty)
 import Data.Either (Either(Left))
@@ -15,20 +14,21 @@ import Data.HTTP.Method (Method(..))
 import Data.List ((:))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (intercalate)
+import Debug.Trace (traceAny)
 import Network.HTTP.Affjax (affjax, defaultRequest)
+import Prelude (bind, const, discard, pure, (#), ($), (*>), (<>))
 import Pux (EffModel, mapEffects, mapState, noEffects)
+import Pux.DOM.Events (onClick)
 import Pux.DOM.HTML (HTML, child)
-import Query.Types (class ToQueryPathString)
+import Query.Parser.UrlQueryParser (runBreakdownParser, runFilterParser) as P
 import React (ReactClass)
 import Text.Smolder.HTML.Attributes (className, type', value)
-import App.Utils.RouteValue (RouteValue(..), fromRouteValue)
-import App.LayoutTypes (Action(..), QueryInputType(..), QueryState(..), State)
-import App.Effects (AppEffects)
+import Text.Smolder.Markup (text, (!), (#!))
 
-initialState :: State
+initialState ::   State
 initialState = {
-    filterQueryInput: QueryInput.initialState { parser: P.runFilterParser, value: "" }
-  , breakdownQueryInput: QueryInput.initialState { parser: P.runBreakdownParser, value: "" }
+    filterQueryInput: (QueryInput.initialState P.runFilterParser) -- { value = filterStr }
+  , breakdownQueryInput: (QueryInput.initialState P.runBreakdownParser) -- { value = breakdownStr }
   , filterStr: NotInitialized
   , breakdownStr: NotInitialized
   , dateFrom: "2018-05-09"
@@ -40,32 +40,32 @@ initialState = {
 update :: Action -> State ->  EffModel State Action AppEffects
 update (QueryInputAction ty ev) state = 
   let tup = 
-          case ty of
-            FilterQueryInputType ->  handle state.filterQueryInput (\s -> state { filterQueryInput = s, filterStr = FromComponent s.value })
-            BreakdownQueryInputType -> handle state.breakdownQueryInput (\s -> state { breakdownQueryInput = s, breakdownStr = FromComponent s.value })
+        case ty of
+          FilterQueryInputType -> 
+            QueryInput.update ev state.filterQueryInput
+              # mapEffects (QueryInputAction ty) # mapState (\s -> state { filterStr = FromComponent s.value, filterQueryInput = s })
+          BreakdownQueryInputType -> 
+            QueryInput.update ev state.breakdownQueryInput
+              # mapEffects (QueryInputAction ty) # mapState (\s -> state { breakdownStr = FromComponent s.value, breakdownQueryInput = s })
   in {state: tup.state, effects: tup.effects} -- A.cons (liftEff (consoleLog state *> consoleLog ev *> consoleLog tup.state) *> pure Nothing) tup.effects}
 
-  where
-  handle :: forall a. ToQueryPathString a => QueryInput.State a
-  → (QueryInput.State a → State ) 
-  → EffModel State Action AppEffects
-  handle  get' set' = 
-    QueryInput.update ev get'
-      # mapEffects (QueryInputAction ty) # mapState set'
-
 update (Result result) state = noEffects $ state { result = CompletedSuccessfully result }
-update Query state = {
-  state: state { result = Running },
+update Query state' = traceAny {component: "Layout/update", state'} $ const {
+  state: state { result = Running, filterStr = FromComponent state.filterQueryInput.value },
   effects: [
+    do liftEff (consoleLog "-----\nLayout" *> consoleLog state' *> consoleLog state) *> pure Nothing
+    ,
     do
       let url = "http://localhost:8080/api/" 
-              <>  intercalate "/" ("Sessions" : state.timezone :  state.dateFrom : state.dateTo : state.filterQueryInput.value : state.breakdownQueryInput.value : empty) 
+              <>  intercalate "/" ("Sessions" : state.timezone :  state.dateFrom : state.dateTo : fromRouteValue "" state.filterStr : fromRouteValue "" state.breakdownStr : empty) 
               <> "?sync=true"
       res <- affjax $ defaultRequest { url = url, method = Left GET }
       liftEff $ consoleLog (res.response :: Foreign)
       pure $ Just (Result res.response)
   ]
-}
+  }
+  where
+    state = state' { result = Running, filterStr = FromComponent state'.filterQueryInput.value }
 
 view :: State -> HTML Action
 view state =
