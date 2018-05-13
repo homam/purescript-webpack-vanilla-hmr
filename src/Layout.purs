@@ -58,7 +58,9 @@ update Query state = {
   state: state { result = Running },
   effects: [
     do
-      let url = "http://localhost:8080/api/" <>  intercalate "/" ("Sessions" : state.timezone :  state.dateFrom : state.dateTo : state.filterQueryInput.value : state.breakdownQueryInput.value : empty) <> "?sync=true"
+      let url = "http://localhost:8080/api/" 
+              <>  intercalate "/" ("Sessions" : state.timezone :  state.dateFrom : state.dateTo : state.filterQueryInput.value : state.breakdownQueryInput.value : empty) 
+              <> "?sync=true"
       res <- affjax $ defaultRequest { url = url, method = Left GET }
       liftEff $ consoleLog (res.response :: Foreign)
       pure $ Just (Result res.response)

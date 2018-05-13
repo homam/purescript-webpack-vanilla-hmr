@@ -4,8 +4,9 @@ import Prelude
 import App.Layout as Layout
 import App.LayoutTypes as LayoutTypes
 import Data.Array as A
-import App.Utils.RouteValue (RouteValue(..))
-import App.Routes (Route(..), match)
+import App.Effects (AppEffects)
+import App.Routes (Route(..), match, toUrl)
+import App.Utils.RouteValue (RouteValue(..), fromRouteValue)
 import Control.Alternative ((<|>))
 import Control.Applicative (pure)
 import Control.Bind ((=<<), bind)
@@ -30,7 +31,6 @@ import Pux.DOM.HTML (HTML, child)
 import Text.Smolder.HTML (a, div, h1, li, nav, ul)
 import Text.Smolder.HTML.Attributes (href)
 import Text.Smolder.Markup ((!), (#!), text)
-import App.Effects (AppEffects)
 
 
 data Event = PageView Route | Navigate String (Maybe DOMEvent) | LayoutAction LayoutTypes.Action
@@ -57,8 +57,12 @@ foldp (LayoutAction ev) st =
                           Layout.update ev st.counterState 
                             # mapEffects LayoutAction # mapState (\s -> st { counterState = s })
   in if ev == LayoutTypes.Query
-    then {state, effects: A.cons (pure $ Just $ Navigate "/" Nothing) effects } 
+    then {state, effects: A.cons (pure $ Just $ Navigate (toUrl toRoute) Nothing) effects } 
     else {state, effects} 
+
+  where
+  s = st.counterState
+  toRoute = Reports "Sessions" s.timezone s.dateFrom s.dateTo (fromRouteValue "" s.filterStr) (fromRouteValue "" s.breakdownStr)
 
 view :: State -> HTML Event
 view state =
