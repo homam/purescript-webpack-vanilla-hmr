@@ -3,20 +3,21 @@ module Server.Query where
 import Data.JSDate as JSDate
 import Database.Postgres as PG
 import Server.Utils.TTLCache as C
-import Control.Monad.Aff (Aff, Fiber, error, forkAff, killFiber, launchAff)
+import Control.Monad.Aff (Aff, Fiber, attempt, error, forkAff, killFiber, launchAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (liftEff)
 import Control.Monad.Eff.Console (CONSOLE, log)
+import Control.Monad.Eff.Exception as X
 import Control.Monad.Eff.Now (NOW)
 import Control.Monad.Eff.Ref (REF, Ref)
-import Data.Either (Either(..))
+import Data.Either (Either(..), either)
 import Data.Foreign (Foreign)
 import Data.Maybe (Maybe(..))
-import Prelude (class Show, bind, discard, not, pure, show, void, ($), (&&), (<>), (||))
+import Prelude (class Show, bind, discard, not, pure, show, void, ($), (&&), (<<<), (<>), (||))
 
 type QueryCache a = C.Cache (QueryState a)
 
-data QueryState e = Running ( Fiber (FiberEffect e) (Array Foreign)) JSDate.JSDate | Error String | Cancelled | Done (Array Foreign)
+data QueryState e = Running ( Fiber (FiberEffect e) (Either X.Error (Array Foreign))) JSDate.JSDate | Error String | Cancelled | Done (Array Foreign)
 
 isDone :: ∀ a. QueryState a → Boolean
 isDone (Done _) = true
@@ -70,9 +71,9 @@ queryAsync cache pool nocache qid q = do
     let myAff = PG.withClient pool (PG.query_ (PG.Query q :: PG.Query Foreign))
 
     fiber <- forkAff $ do
-      results <- myAff
+      results <- attempt myAff
       liftEff $ log $ "Done " <> qid
-      liftEff $  C.updateCache cache qid (Done results)
+      liftEff $ C.updateCache cache qid  (either (Error <<< show) Done results)
       pure results
 
     now <- liftEff JSDate.now

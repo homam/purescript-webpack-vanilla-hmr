@@ -58,7 +58,10 @@ foldp (LayoutAction ev) st =
   traceAny {component: "App/foldp (LayoutAction)", ev, st} $ const 
                 let {state, effects} = 
                                         Layout.update ev st.layoutState 
-                                          # mapEffects LayoutAction # mapState (\s ->  traceAny {component: "App/foldp (mapState)", s} $ const $ st { layoutState = toLayoutState st.currentRoute s }  )
+                                          # mapEffects LayoutAction 
+                                          # mapState (\s -> 
+                                            traceAny {component: "App/foldp (mapState)", s} $ const $ 
+                                            st { layoutState = toLayoutState st.currentRoute s }  )
                 in if ev == LayoutTypes.Query
                   then {state, effects: A.cons (pure $ Just $ Navigate (toUrl toRoute) Nothing) effects } 
                   else {state, effects} 
@@ -74,8 +77,6 @@ toLayoutState (Reports report timezone dateFrom dateTo filterStr breakdownStr) l
       timezone = timezone 
     , dateFrom = dateFrom
     , dateTo = dateTo
-    -- , filterQueryInput = layoutState.filterQueryInput { value = fromRouteValue "" $ FromRoute filterStr <|> layoutState.filterStr  }
-    -- , breakdownQueryInput = layoutState.breakdownQueryInput { value = breakdownStr }
     , filterStr = FromRoute filterStr <|> layoutState.filterStr 
     , breakdownStr = FromRoute breakdownStr <|>  layoutState.breakdownStr 
   }

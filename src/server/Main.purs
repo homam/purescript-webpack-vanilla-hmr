@@ -7,7 +7,7 @@ import Database.Postgres as PG
 import Node.Express.Response as Res
 import Node.FS.Sync as FS
 import Server.Utils.TTLCache as Cache
-import Control.Monad.Aff (forkAff, joinFiber, launchAff_, runAff)
+import Control.Monad.Aff (attempt, forkAff, joinFiber, launchAff_, runAff)
 import Control.Monad.Aff.Class (liftAff)
 import Control.Monad.Eff.Class (liftEff)
 import Control.Monad.Eff.Console (CONSOLE, log)
@@ -112,7 +112,7 @@ apiReportHandler (AppState state) = do
     Left e -> do 
       liftEff $ log $ show e
       Res.setContentType "text/plain"
-      send $ show e
+      send $ {status: "Error", errorText: show e }
     (Right sqlTemplate) -> do 
       if returnSql 
         then Res.setContentType "text/plain" *> send sqlTemplate
@@ -123,7 +123,12 @@ apiReportHandler (AppState state) = do
           qs <- liftAff $ state.queryAsync nocache hash sqlTemplate
           if isSync 
             then case qs of
-              Running fiber _ -> liftAff (joinFiber fiber) >>= (\result -> send { status: "Done", result })
+              Running fiber _ -> liftAff (joinFiber fiber) >>= (\result -> 
+                either 
+                  (\e -> send { status: "Error", errorText: show e })
+                  (\r -> send { status: "Done", result: r })
+                  result
+                )
               Done result -> send { status: "Done", result }
               Error e -> send { status: "Error", errorText: show e }
               Cancelled -> send { status: "Cancelled" }

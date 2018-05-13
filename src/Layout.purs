@@ -6,9 +6,10 @@ import App.Effects (AppEffects)
 import App.LayoutTypes (Action(..), QueryInputType(..), QueryState(..), State)
 import App.Utils (consoleLog, jsonStringify)
 import App.Utils.RouteValue (RouteValue(..), fromRouteValue)
+import Control.Monad.Aff (attempt)
 import Control.Monad.Eff.Class (liftEff)
 import Control.MonadZero (empty)
-import Data.Either (Either(Left))
+import Data.Either (Either(..))
 import Data.Foreign (Foreign)
 import Data.HTTP.Method (Method(..))
 import Data.List ((:))
@@ -16,7 +17,7 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (intercalate)
 import Debug.Trace (traceAny)
 import Network.HTTP.Affjax (affjax, defaultRequest)
-import Prelude (bind, const, discard, pure, (#), ($), (*>), (<>))
+import Prelude (bind, const, discard, pure, show, (#), ($), (*>), (<>))
 import Pux (EffModel, mapEffects, mapState, noEffects)
 import Pux.DOM.Events (onClick)
 import Pux.DOM.HTML (HTML, child)
@@ -39,28 +40,34 @@ initialState = {
 
 update :: Action -> State ->  EffModel State Action AppEffects
 update (QueryInputAction ty ev) state = 
-        case ty of
-          FilterQueryInputType -> 
-            QueryInput.update ev state.filterQueryInput
-              # mapEffects (QueryInputAction ty) # mapState (\s -> state { filterStr = FromComponent s.value, filterQueryInput = s })
-          BreakdownQueryInputType -> 
-            QueryInput.update ev state.breakdownQueryInput
-              # mapEffects (QueryInputAction ty) # mapState (\s -> state { breakdownStr = FromComponent s.value, breakdownQueryInput = s })
+  case ty of
+    FilterQueryInputType -> 
+      QueryInput.update ev state.filterQueryInput
+        # mapEffects (QueryInputAction ty) # mapState (\s -> state { filterStr = FromComponent s.value, filterQueryInput = s })
+    BreakdownQueryInputType -> 
+      QueryInput.update ev state.breakdownQueryInput
+        # mapEffects (QueryInputAction ty) # mapState (\s -> state { breakdownStr = FromComponent s.value, breakdownQueryInput = s })
 
-update (Result result) state = noEffects $ state { result = CompletedSuccessfully result }
+update (Result eres) state = noEffects $ state { 
+    result = case eres of
+      Left e -> CompletedWithError  $ "Completed with errors: \n" <> show e
+      Right r -> CompletedSuccessfully r
+  }
 update Query state' = traceAny {component: "Layout/update", state'} $ const {
   state: state { result = Running },
   effects: [
-    do liftEff (consoleLog "-----\nLayout" *> consoleLog state' *> consoleLog state) *> pure Nothing
-    ,
     do
       let url = "http://localhost:8080/api/" 
               <>  intercalate "/" ("Sessions" : state.timezone :  state.dateFrom : state.dateTo : fromRouteValue "" state.filterStr : fromRouteValue "" state.breakdownStr : empty) 
               <> "?sync=true"
-      res <- affjax $ defaultRequest { url = url, method = Left GET }
-      liftEff $ consoleLog (res.response :: Foreign)
-      pure $ Just (Result res.response)
-  ]
+      
+      eres <- attempt $ affjax $ defaultRequest { url = url, method = Left GET }
+      case eres of
+        Left e -> pure $ Just $ Result $ Left e
+        Right res -> do
+          liftEff $ consoleLog (res.response :: Foreign)
+          pure $ Just $ Result $ Right res.response
+    ]
   }
   where
     state = state' { result = Running }
